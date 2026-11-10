@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>100-Point Daily OS</title>
+<meta name="description" content="A 100-point daily habit score across Career, Gym, Diet, Learning and Culture.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Daily OS">
+<meta name="application-name" content="Daily OS">
+<meta name="theme-color" content="#09090b">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  if (window.tailwind) tailwind.config = { theme: { extend: { fontFamily: {
+    sans: ['Sora', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+    mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'] } } } };
+</script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  html, body { background: #09090b; color: #e4e4e7; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+  body { font-family: 'Sora', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; }
+  .num { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  input, select, textarea { font-size: 16px; }
+  button { touch-action: manipulation; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent, #7dd3fc); outline-offset: 2px; }
+  .sheet-in { animation: sheetIn .28s cubic-bezier(.2,.8,.2,1); }
+  .fade-in { animation: fadeIn .25s ease-out; }
+  .pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes sheetIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes pop { from { transform: scale(.9); opacity: .4; } to { transform: none; opacity: 1; } }
+  .receipt { background: #fafaf9; color: #18181b; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    -webkit-mask: radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) 0 0 / 12px 100% repeat-x;
+            mask: radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) 0 0 / 12px 100% repeat-x; }
+  .dash { border-top: 1px dashed #a1a1aa; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="root">
+  <div style="padding:48px 24px;text-align:center;color:#a1a1aa;font-family:system-ui">
+    Loading 100-Point Daily OS…<br><small>First load needs an internet connection to fetch React and Tailwind.</small>
+  </div>
+</div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+/* ============================== UTILITIES ============================== */
+const pad = n => String(n).padStart(2, '0');
+const dateStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parseDate(s); d.setDate(d.getDate() + n); return dateStr(d); };
+const niceDate = s => parseDate(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const weekStart = s => { const d = parseDate(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return dateStr(d); };
+const uid = () => Math.random().toString(36).slice(2, 10);
+const fmt = n => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+const STORE_KEY = 'daily_os_100_v1';
+
+/* ============================== CONFIG ============================== */
+const CATS = [
+  { id: 'career', name: 'Career', pts: 25, icon: 'Briefcase', defFocus: 'Core Career Output', primary: 'deep' },
+  { id: 'gym', name: 'Gym & Movement', pts: 20, icon: 'Dumbbell', defFocus: 'Strength & Conditioning', primary: 'gym' },
+  { id: 'diet', name: 'Diet', pts: 20, icon: 'Utensils', defFocus: '150g Protein + Calorie Target', primary: 'protein' },
+  { id: 'learning', name: 'Learning', pts: 20, icon: 'BookOpen', defFocus: 'Skill Acquisition', primary: 'learn' },
+  { id: 'culture', name: 'Cultural Enrichment', pts: 15, icon: 'Globe', defFocus: 'Language Learning (Active)', primary: 'culture' },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+const TASKS = [
+  { id: 'deep', cat: 'career', label: '#1 Deep Work Priority', pts: 15, timer: true, energy: 3, mins: 30 },
+  { id: 'admin', cat: 'career', label: 'Clear Daily Admin / Inbox Zero', pts: 10, energy: 2, mins: 15 },
+  { id: 'gym', cat: 'gym', label: 'Workout Attended', pts: 20, energy: 3, mins: 30 },
+  { id: 'protein', cat: 'diet', label: 'Protein Goal Hit', pts: 10, energy: 1, mins: 15 },
+  { id: 'calories', cat: 'diet', label: 'Calorie Goal Hit', pts: 10, energy: 1, mins: 15 },
+  { id: 'learn', cat: 'learning', label: '30 min focused skill-building / reading', pts: 20, timer: true, auto: true, energy: 2, mins: 30 },
+  { id: 'culture', cat: 'culture', label: 'Daily cultural / language habit', pts: 15, energy: 1, mins: 15 },
+];
+const RECOVERY = [
+  { id: 'r_water', label: 'Hydration — 2 litres of water', pts: 25, icon: 'Droplets', energy: 1, mins: 15 },
+  { id: 'r_sleep', label: '8 hours of sleep (or lights out early tonight)', pts: 30, icon: 'Moon', energy: 1, mins: 15 },
+  { id: 'r_stretch', label: 'Gentle stretching — 10 minutes', pts: 20, icon: 'Activity', energy: 1, mins: 15 },
+  { id: 'r_read', label: 'Light reading — 15 minutes', pts: 25, icon: 'BookOpen', energy: 1, mins: 15 },
+];
+const TIERS = [
+  { id: 'base', min: 0, name: 'Base', sub: 'Building', color: '#7dd3fc' },
+  { id: 'bronze', min: 50, name: 'Bronze', sub: 'Maintenance', color: '#d6915a' },
+  { id: 'silver', min: 70, name: 'Silver', sub: 'Streak Safe', color: '#d4d4d8' },
+  { id: 'gold', min: 90, name: 'Gold', sub: 'Peak Day', color: '#facc15' },
+];
+const tierFor = s => [...TIERS].reverse().find(t => s >= t.min);
+const ENERGY = { low: 'Low Energy (Couch)', quick: 'Quick 15m', deep: 'Deep Dive' };
+const TIMER_SECS = 30 * 60;
+const LEVEL_EVERY = 14;
+
+const seed = (energy, text, tag) => ({ id: uid(), energy, text, ...(tag ? { tag } : {}) });
+const seedVault = () => ({
+  career: [
+    seed('low', "Pick tomorrow's #1 priority and write it on a sticky note"),
+    seed('low', 'Read one saved article from your field and note one takeaway'),
+    seed('low', 'Unsubscribe from 5 newsletters cluttering your inbox'),
+    seed('quick', 'Outline your next deliverable — headings only'),
+    seed('quick', "Send the one email you've been avoiding"),
+    seed('quick', 'Process your inbox to zero with the 2-minute rule'),
+    seed('quick', 'Add one recent win to your CV or portfolio'),
+    seed('deep', 'Phone in another room: one uninterrupted block on your hardest open task'),
+    seed('deep', 'Write the first ugly draft of the thing that is due next'),
+    seed('deep', 'Map the next two weeks: deadlines, blockers and first steps'),
+  ],
+  gym: [
+    seed('low', '10-minute full-body stretch while watching something'),
+    seed('low', 'Foam roll legs and back for 10 minutes'),
+    seed('quick', '3 rounds: 10 push-ups, 15 squats, 30-second plank'),
+    seed('quick', '15-minute brisk walk, no phone scrolling'),
+    seed('deep', 'Full session: follow your programme and log every set'),
+    seed('deep', '45-minute class or steady zone-2 cardio'),
+    seed('low', 'Hit 8,000 steps with a podcast', 'rest'),
+    seed('low', 'Legs up the wall plus slow breathing for 10 minutes', 'rest'),
+    seed('quick', '15-minute mobility flow: hips, shoulders, ankles', 'rest'),
+    seed('quick', 'Follow a 20-minute gentle yoga video', 'rest'),
+    seed('deep', 'Easy 30-minute walk followed by a 10-minute stretch', 'rest'),
+  ],
+  diet: [
+    seed('low', "Log everything you've eaten so far today"),
+    seed('low', 'Fill a water bottle and finish it before your next meal'),
+    seed('quick', "Prep tomorrow's protein: cook chicken, eggs or tofu"),
+    seed('quick', "Plan tomorrow's three meals around your protein target"),
+    seed('deep', 'Batch-cook four high-protein lunches for the week'),
+    seed('deep', 'Do a full grocery shop from a macro-friendly list'),
+    seed('low', '0% Greek yoghurt (200g) + a scoop of whey — about 40g protein, 230 kcal', 'rescue'),
+    seed('low', 'Protein shake made with water — about 25g protein, 120 kcal', 'rescue'),
+    seed('low', 'Cottage cheese (250g) + berries — about 28g protein, 220 kcal', 'rescue'),
+    seed('low', 'Tin of tuna in spring water + 2 rice cakes — about 27g protein, 200 kcal', 'rescue'),
+    seed('quick', 'Egg-white omelette (5 whites) with spinach — about 18g protein, 100 kcal', 'rescue'),
+    seed('low', 'Skyr pot + a handful of edamame — about 30g protein, 250 kcal', 'rescue'),
+    seed('low', 'Turkey or chicken slices (100g) rolled with mustard — about 22g protein, 110 kcal', 'rescue'),
+    seed('low', 'High-protein pudding pot — about 20g protein, 150 kcal', 'rescue'),
+  ],
+  learning: [
+    seed('low', 'Watch one 15-minute explainer video and write 3 bullet notes'),
+    seed('low', 'Listen to one educational podcast episode'),
+    seed('low', "Re-read yesterday's notes and highlight what stuck"),
+    seed('quick', 'Do one practice problem or exercise set'),
+    seed('quick', 'Summarise one concept in 5 sentences from memory'),
+    seed('quick', 'Review flashcards for 15 minutes'),
+    seed('deep', '30 minutes of focused reading with notes, phone in another room'),
+    seed('deep', 'Build or write something small using what you learned this week'),
+    seed('deep', 'Teach it: record a 5-minute voice note explaining the topic'),
+  ],
+  culture: [
+    seed('low', 'Watch 15 minutes of native YouTube or Netflix with target-language subtitles'),
+    seed('low', 'Listen to a slow target-language podcast episode'),
+    seed('low', 'Play a target-language playlist and follow along with the lyrics'),
+    seed('quick', 'Clear your Anki flashcard deck'),
+    seed('quick', "Translate one song's lyrics"),
+    seed('quick', 'Switch your phone OS language for the day'),
+    seed('quick', 'Write 10 new words in sentences about your day'),
+    seed('deep', 'Write a 5-sentence journal entry in your target language'),
+    seed('deep', '20 minutes of audio shadowing: repeat a native speaker line by line'),
+    seed('deep', 'Read one short news article and look up every unknown word'),
+    seed('deep', '30 minutes of conversation practice: tutor, exchange partner or voice notes'),
+  ],
+});
+
+/* ============================== STATE MODEL ============================== */
+const newDay = date => ({
+  date, recovery: false, gymMode: 'workout', tasks: {}, missions: {}, protein: 0,
+  earlyBird: false, early: 0, overdrive: 0, overdriveText: '', timers: {},
+  c70: false, c90: false, logged: false, journal: '', ntfy: null, lastPing: 0,
+});
+const defaults = () => ({
+  v: 1,
+  settings: {
+    proteinTarget: 150, activeStart: 9, activeEnd: 21, notif: false, notifEvery: 60,
+    ntfyTopic: '', sound: true, haptics: true,
+    rewards: [{ id: uid(), pts: 500, label: 'Takeaway Night' }, { id: uid(), pts: 600, label: 'Wishlist Item' }],
+  },
+  focus: Object.fromEntries(CATS.map(c => [c.id, c.defFocus])),
+  levelAck: {},
+  vault: seedVault(),
+  today: newDay(dateStr()),
+  history: {},
+});
+
+function scoreDay(day) {
+  const cats = Object.fromEntries(CATS.map(c => [c.id, 0]));
+  let base = 0;
+  if (day.recovery) RECOVERY.forEach(t => { base += t.pts * (day.tasks[t.id] || 0); });
+  else TASKS.forEach(t => { const p = t.pts * (day.tasks[t.id] || 0); cats[t.cat] += p; base += p; });
+  base = Math.min(100, base);
+  let bonus = 0;
+  if (!day.recovery) {
+    if (day.earlyBird && (day.early || 0) >= 25) bonus += 5;
+    if (base >= 85) bonus += 10 * (day.overdrive || 0);
+  }
+  bonus = Math.min(15, bonus);
+  return { base, bonus, total: base + bonus, cats };
+}
+function snapshot(day, focus) {
+  const sc = scoreDay(day);
+  return { date: day.date, score: sc.total, base: sc.base, bonus: sc.bonus, cats: sc.cats,
+    recovery: !!day.recovery, journal: day.journal || '', focus: { ...focus }, logged: !!day.logged };
+}
+function rollover(n) {
+  const t = dateStr();
+  if (n.today.date === t) return false;
+  if (n.today.date < t) n.history[n.today.date] = snapshot(n.today, n.focus);
+  n.today = newDay(t);
+  return true;
+}
+function hydrate(raw) {
+  const d = defaults();
+  if (!raw || typeof raw !== 'object') return d;
+  const n = { ...d, ...raw };
+  n.settings = { ...d.settings, ...(raw.settings || {}) };
+  if (!Array.isArray(n.settings.rewards)) n.settings.rewards = d.settings.rewards;
+  n.focus = { ...d.focus, ...(raw.focus || {}) };
+  n.vault = { ...d.vault, ...(raw.vault || {}) };
+  CATS.forEach(c => { if (!Array.isArray(n.vault[c.id])) n.vault[c.id] = d.vault[c.id]; });
+  n.today = { ...newDay(dateStr()), ...(raw.today || {}) };
+  ['tasks', 'missions', 'timers'].forEach(k => { if (!n.today[k] || typeof n.today[k] !== 'object') n.today[k] = {}; });
+  n.history = raw.history && typeof raw.history === 'object' ? raw.history : {};
+  n.levelAck = raw.levelAck && typeof raw.levelAck === 'object' ? raw.levelAck : {};
+  rollover(n);
+  return n;
+}
+function load() {
+  try { return hydrate(JSON.parse(localStorage.getItem(STORE_KEY))); } catch (e) { return defaults(); }
+}
+
+/* Streak, shields and gold days are replayed from history, so they can never drift out of sync. */
+function replay(history, upto) {
+  const dates = Object.keys(history).sort();
+  let streak = 0, best = 0, shields = 0, gold = 0, golds = 0, shieldsUsed = 0;
+  if (!dates.length) return { streak, best, shields, gold, golds, shieldsUsed };
+  let d = dates[0], guard = 0;
+  while (d < upto && guard++ < 5000) {
+    const h = history[d]; const sc = h ? h.score : 0;
+    if (sc >= 70) streak++;
+    else if (streak > 0 && shields > 0) { shields--; shieldsUsed++; }
+    else streak = 0;
+    if (sc >= 90) { golds++; gold++; if (gold >= 3) { gold = 0; shields = Math.min(2, shields + 1); } }
+    best = Math.max(best, streak);
+    d = addDays(d, 1);
+  }
+  return { streak, best, shields, gold, golds, shieldsUsed };
+}
+const focusCount = (history, cat, focus) =>
+  Object.values(history).filter(h => h && !h.recovery && h.focus && h.focus[cat] === focus && h.cats && h.cats[cat] > 0).length;
+function rustMap(history, today) {
+  const first = Object.keys(history).sort()[0]; const out = {};
+  CATS.forEach(c => {
+    let n = 0, d = addDays(today, -1), guard = 0;
+    while (first && n < 3 && d >= first && guard++ < 14) {
+      const h = history[d];
+      if (h && h.recovery) { d = addDays(d, -1); continue; }
+      if (h && h.cats && h.cats[c.id] > 0) break;
+      n++; d = addDays(d, -1);
+    }
+    out[c.id] = n >= 3;
+  });
+  return out;
+}
+function weekBank(history, today, liveTotal) {
+  let sum = liveTotal, d = weekStart(today);
+  while (d < today) { if (history[d]) sum += history[d].score; d = addDays(d, 1); }
+  return sum;
+}
+
+/* ============================== SIDE EFFECTS ============================== */
+let actx = null;
+function unlockAudio() {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {}
+}
+function chime(kind) {
+  try {
+    unlockAudio(); if (!actx) return;
+    const notes = kind === 'ping' ? [880, 1174.66] : [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + i * 0.17;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.85);
+    });
+  } catch (e) {}
+}
+function fireConfetti(colors) {
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const c = document.createElement('canvas'), W = c.width = innerWidth, H = c.height = innerHeight;
+    c.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:100';
+    document.body.appendChild(c);
+    const x = c.getContext('2d');
+    const ps = Array.from({ length: 130 }, () => ({
+      x: W / 2, y: H * 0.3, vx: (Math.random() - 0.5) * 16, vy: Math.random() * -14 - 3,
+      s: Math.random() * 7 + 4, r: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, col: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    const t0 = performance.now();
+    (function frame(now) {
+      const el = now - t0; x.clearRect(0, 0, W, H);
+      ps.forEach(p => {
+        p.vy += 0.38; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.globalAlpha = clamp(1 - (el - 1500) / 900, 0, 1);
+        x.fillStyle = p.col; x.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); x.restore();
+      });
+      if (el < 2400) requestAnimationFrame(frame); else c.remove();
+    })(t0);
+  } catch (e) {}
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
+  } catch (e) { return false; }
+}
+const buildPrompt = (cat, focus) => `I use a habit app with an "Idea Vault" for my ${cat.name} category. My current focus is: "${focus}".
+
+Give me exactly 15 fresh, concrete task ideas for this focus:
+- 5 with energy "low" (low energy, doable from the couch)
+- 5 with energy "quick" (about 15 minutes)
+- 5 with energy "deep" (a deep dive needing 30+ minutes of real effort)
+
+Reply with ONLY a JSON array and no commentary, in exactly this shape:
+[{"text":"...","energy":"low"},{"text":"...","energy":"quick"},{"text":"...","energy":"deep"}]
+
+Each "text" must be one specific action under 90 characters that I can start immediately.`;
+function parseIdeas(str) {
+  const a = str.indexOf('['), b = str.lastIndexOf(']');
+  if (a < 0 || b <= a) throw new Error('No JSON array found. Paste the whole reply, starting with [ and ending with ].');
+  let arr;
+  try { arr = JSON.parse(str.slice(a, b + 1)); } catch (e) { throw new Error('That JSON has a typo in it. Ask Claude to resend only the JSON array.'); }
+  const out = (Array.isArray(arr) ? arr : []).map(it => {
+    const text = typeof it === 'string' ? it : (it && (it.text || it.task || it.idea || it.title)) || '';
+    const e = String((it && it.energy) || '').toLowerCase();
+    const energy = /low|couch/.test(e) ? 'low' : /deep/.test(e) ? 'deep' : 'quick';
+    return { id: uid(), text: String(text).trim(), energy };
+  }).filter(i => i.text);
+  if (!out.length) throw new Error('The array was empty or had no "text" fields.');
+  return out;
+}
+
+/* ============================== UI PRIMITIVES ============================== */
+const kebabToCamel = k => k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+function Icon({ name, size = 20, className = '', strokeWidth = 2 }) {
+  const L = window.lucide || {}, reg = L.icons || L;
+  let node = null;
+  for (const n of name.split('|')) { if (reg[n]) { node = reg[n]; break; } }
+  if (!Array.isArray(node)) return <span aria-hidden="true" className={className} style={{ display: 'inline-block', width: size * 0.7, height: size * 0.7, borderRadius: '50%', border: '2px solid currentColor', opacity: 0.6 }} />;
+  const kids = typeof node[0] === 'string' ? (node[2] || []) : node;
+  return (
+    <svg aria-hidden="true" className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {kids.map((k, i) => {
+        const props = {}; Object.keys(k[1] || {}).forEach(a => { if (a !== 'key') props[kebabToCamel(a)] = k[1][a]; });
+        return React.createElement(k[0], { ...props, key: i });
+      })}
+    </svg>
+  );
+}
+function Sheet({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="sheet-in relative w-full max-w-md max-h-[88vh] overflow-y-auto rounded-t-3xl bg-zinc-900 border-t border-zinc-700 px-5 pt-5" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
+          <button onClick={onClose} aria-label="Close" className="w-10 h-10 -mr-2 grid place-items-center text-zinc-400 rounded-full active:bg-zinc-800"><Icon name="X" /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+const BTN = 'rounded-xl px-4 min-h-[48px] text-sm font-semibold inline-flex items-center justify-center gap-2 active:scale-[.98] transition-transform disabled:opacity-40';
+const GHOST = BTN + ' bg-zinc-800 text-zinc-100 border border-zinc-700';
+const INPUT = 'w-full rounded-xl bg-zinc-950 border border-zinc-700 px-3 py-3 text-zinc-100 placeholder-zinc-600';
+const CARD = 'rounded-2xl bg-zinc-900 border border-zinc-800 p-4';
+function Chips({ options, value, onChange, accent }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map(([v, label]) => (
+        <button key={v} onClick={() => onChange(v)} aria-pressed={value === v}
+          className="rounded-full px-3.5 min-h-[40px] text-sm font-medium border border-zinc-700 text-zinc-300"
+          style={value === v ? { background: accent, color: '#09090b', borderColor: accent } : {}}>{label}</button>
+      ))}
+    </div>
+  );
+}
+function Toggle({ on, onChange, label, accent }) {
+  return (
+    <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
+      className="relative w-14 h-8 rounded-full shrink-0 transition-colors" style={{ background: on ? accent : '#3f3f46' }}>
+      <span className="absolute top-1 w-6 h-6 rounded-full bg-zinc-950 transition-all" style={{ left: on ? 28 : 4 }} />
+    </button>
+  );
+}
+function Ring({ total, color }) {
+  const r = 30, c = 2 * Math.PI * r, r2 = 36, c2 = 2 * Math.PI * r2;
+  const pct = clamp(total / 100, 0, 1), over = clamp((total - 100) / 15, 0, 1);
+  const ease = { transition: 'stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1), stroke .5s' };
+  return (
+    <div className="relative w-[78px] h-[78px] shrink-0" role="img" aria-label={`Today's score: ${fmt(total)} points`}>
+      <svg width="78" height="78" viewBox="0 0 78 78">
+        <circle cx="39" cy="39" r={r} stroke="#27272a" strokeWidth="6" fill="none" />
+        <circle cx="39" cy="39" r={r} stroke={color} strokeWidth="6" fill="none" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct)} transform="rotate(-90 39 39)" style={ease} />
+        <circle cx="39" cy="39" r={r2} stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeDasharray={c2} strokeDashoffset={c2 * (1 - over)} transform="rotate(-90 39 39)" style={{ ...ease, opacity: over > 0 ? 0.9 : 0 }} />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="text-center leading-none">
+          <div className="num text-[22px] font-bold" style={{ color }}>{fmt(total)}</div>
+          <div className="num text-[9px] text-zinc-500 mt-1">/ 100</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TaskRow({ label, sub, pts, val, onSet, accent, children }) {
+  const on = { background: accent, color: '#09090b' };
+  return (
+    <div className="py-3 border-t border-zinc-800">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className={'text-[15px] leading-snug ' + (val === 1 ? 'text-zinc-500 line-through' : 'text-zinc-100')}>{label}</div>
+          {sub && <div className="text-xs text-zinc-400 mt-1 leading-snug">{sub}</div>}
+        </div>
+        <div className="num text-xs w-10 text-right" style={{ color: val ? accent : '#71717a' }}>{val ? '+' + fmt(pts * val) : pts + 'pt'}</div>
+        <div className="flex rounded-xl overflow-hidden border border-zinc-700 shrink-0">
+          <button aria-label={`Half credit: ${label}`} aria-pressed={val === 0.5} onClick={() => onSet(val === 0.5 ? 0 : 0.5)} className="w-11 h-11 text-sm font-bold text-zinc-300" style={val === 0.5 ? on : {}}>½</button>
+          <button aria-label={`Full credit: ${label}`} aria-pressed={val === 1} onClick={() => onSet(val === 1 ? 0 : 1)} className="w-11 h-11 grid place-items-center border-l border-zinc-700 text-zinc-300" style={val === 1 ? on : {}}><Icon name="Check" size={18} strokeWidth={3} /></button>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+function TimerBar({ t, onChange, accent, note }) {
+  const [, force] = useState(0);
+  const running = !!(t && t.end);
+  useEffect(() => { if (!running) return; const i = setInterval(() => force(x => x + 1), 500); return () => clearInterval(i); }, [running]);
+  const left = running ? Math.max(0, Math.round((t.end - Date.now()) / 1000)) : (t && t.left != null ? t.left : TIMER_SECS);
+  const done = !!(t && t.done);
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2">
+      <Icon name="Timer" size={16} className="text-zinc-500" />
+      <div className="num text-lg font-semibold w-16" style={{ color: running || done ? accent : '#e4e4e7' }} aria-live="off">{done ? 'Done' : `${pad(Math.floor(left / 60))}:${pad(left % 60)}`}</div>
+      <div className="flex-1 text-[11px] text-zinc-500 leading-tight">{note}</div>
+      {!done && <button onClick={() => { unlockAudio(); onChange(running ? { left } : { end: Date.now() + left * 1000 }); }} className="w-10 h-10 grid place-items-center rounded-lg bg-zinc-800 text-zinc-100" aria-label={running ? 'Pause timer' : 'Start timer'}><Icon name={running ? 'Pause' : 'Play'} size={16} /></button>}
+      {(t && (done || !running)) && <button onClick={() => onChange(null)} className="w-10 h-10 grid place-items-center rounded-lg bg-zinc-800 text-zinc-400" aria-label="Reset timer"><Icon name="RotateCcw" size={16} /></button>}
+    </div>
+  );
+}
+
+/* ============================== MODALS ============================== */
+function IdeaModal({ cat, pool, tagLabel, showList, accent, onLock, onClose }) {
+  const [energy, setEnergy] = useState('all');
+  const filtered = pool.filter(i => energy === 'all' || i.energy === energy);
+  const pick = (list, not) => { const c = list.filter(i => !not || i.id !== not.id); const src = c.length ? c : list; return src[Math.floor(Math.random() * src.length)] || null; };
+  const [idea, setIdea] = useState(() => pick(pool));
+  const changeEnergy = e => { setEnergy(e); setIdea(pick(pool.filter(i => e === 'all' || i.energy === e))); };
+  return (
+    <Sheet title={tagLabel || `Inspire Me · ${cat.name}`} onClose={onClose}>
+      <div className="text-xs text-zinc-400 mb-2">How much energy have you got?</div>
+      <Chips accent={accent} value={energy} onChange={changeEnergy} options={[['all', 'Any'], ['low', ENERGY.low], ['quick', ENERGY.quick], ['deep', ENERGY.deep]]} />
+      <div key={idea ? idea.id : 'none'} className="pop mt-4 rounded-2xl border border-zinc-700 bg-zinc-950 p-5 min-h-[120px]">
+        {idea ? (<>
+          <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: accent }}>{ENERGY[idea.energy]}</div>
+          <div className="text-lg leading-snug text-zinc-50">{idea.text}</div>
+        </>) : <div className="text-zinc-400">No ideas at this energy level yet. Add some in Vault &amp; Goals.</div>}
+      </div>
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <button className={GHOST} onClick={() => setIdea(pick(filtered, idea))} disabled={filtered.length < 2}><Icon name="Dices" size={18} />Shuffle Idea</button>
+        <button className={BTN} style={{ background: accent, color: '#09090b' }} disabled={!idea} onClick={() => onLock(idea.text)}><Icon name="Lock" size={18} />Lock In Mission</button>
+      </div>
+      {showList && (
+        <div className="mt-5">
+          <div className="text-xs text-zinc-400 mb-2">Everything in this vault (macros are rough estimates — check the label)</div>
+          {pool.map(i => <button key={i.id} onClick={() => setIdea(i)} className="block w-full text-left text-sm text-zinc-300 py-2.5 border-t border-zinc-800">{i.text}</button>)}
+        </div>
+      )}
+    </Sheet>
+  );
+}
+function GoalSyncModal({ cat, focus, accent, count, onSaveFocus, onImport, onAdd, onClose, toast }) {
+  const [draft, setDraft] = useState(focus);
+  const [json, setJson] = useState('');
+  const [err, setErr] = useState('');
+  const [single, setSingle] = useState('');
+  const [energy, setEnergy] = useState('quick');
+  const [showPrompt, setShowPrompt] = useState(false);
+  const prompt = buildPrompt(cat, draft.trim() || focus);
+  const run = mode => { try { const ideas = parseIdeas(json); onImport(ideas, mode); setJson(''); setErr(''); toast(`${ideas.length} ideas ${mode === 'overwrite' ? 'replaced the deck' : 'added'}`); } catch (e) { setErr(e.message); } };
+  return (
+    <Sheet title={`Goal Sync · ${cat.name}`} onClose={onClose}>
+      <label className="block text-xs text-zinc-400 mb-1" htmlFor="gs-focus">Current Focus</label>
+      <div className="flex gap-2">
+        <input id="gs-focus" className={INPUT} value={draft} onChange={e => setDraft(e.target.value)} placeholder="e.g. B2 Spanish, Film History" />
+        <button className={BTN} style={{ background: accent, color: '#09090b' }} disabled={!draft.trim() || draft.trim() === focus} onClick={() => { onSaveFocus(draft.trim()); toast('Focus updated'); }}>Save</button>
+      </div>
+      <div className="text-xs text-zinc-500 mt-2">{count} of {LEVEL_EVERY} completions logged under “{focus}”.</div>
+
+      <div className="mt-5 rounded-2xl border border-zinc-800 p-4">
+        <div className="text-sm font-semibold text-zinc-100 mb-1">AI Deck Updater</div>
+        <ol className="text-xs text-zinc-400 space-y-1 list-decimal pl-4 mb-3">
+          <li>Copy the prompt and paste it into Claude.</li>
+          <li>Paste Claude's JSON reply below.</li>
+          <li>Overwrite the deck or append to it.</li>
+        </ol>
+        <button className={GHOST + ' w-full'} onClick={async () => { const ok = await copyText(prompt); setShowPrompt(!ok); toast(ok ? 'Prompt copied — paste it into Claude' : 'Copy blocked — select the text below'); }}><Icon name="Copy" size={18} />Copy prompt for Claude</button>
+        {showPrompt && <textarea readOnly className={INPUT + ' mt-2 h-32 text-xs'} value={prompt} onFocus={e => e.target.select()} />}
+        <label className="block text-xs text-zinc-400 mt-4 mb-1" htmlFor="gs-json">Claude's JSON reply</label>
+        <textarea id="gs-json" className={INPUT + ' h-28 num text-xs'} value={json} onChange={e => { setJson(e.target.value); setErr(''); }} placeholder='[{"text":"...","energy":"low"}, ...]' />
+        {err && <div role="alert" className="text-xs text-amber-400 mt-2">{err}</div>}
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <button className={GHOST} disabled={!json.trim()} onClick={() => run('overwrite')}>Overwrite deck</button>
+          <button className={BTN} style={{ background: accent, color: '#09090b' }} disabled={!json.trim()} onClick={() => run('append')}>Append to deck</button>
+        </div>
+        <div className="text-[11px] text-zinc-500 mt-2">Overwrite keeps your Protein Rescue and Active Rest vaults.</div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-zinc-800 p-4">
+        <label className="block text-sm font-semibold text-zinc-100 mb-2" htmlFor="gs-single">+ Add Single Idea</label>
+        <input id="gs-single" className={INPUT} value={single} onChange={e => setSingle(e.target.value)} placeholder="One specific action" />
+        <div className="flex gap-2 mt-2">
+          <select aria-label="Energy level" className={INPUT} value={energy} onChange={e => setEnergy(e.target.value)}>
+            {Object.entries(ENERGY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <button className={GHOST} disabled={!single.trim()} onClick={() => { onAdd({ id: uid(), text: single.trim(), energy }); setSingle(''); toast('Idea added'); }}>Add</button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+function RouletteModal({ accent, getPick, onGo, onClose }) {
+  const [energy, setEnergy] = useState('med');
+  const [time, setTime] = useState(15);
+  const [res, setRes] = useState(null);
+  return (
+    <Sheet title="What Should I Do Now?" onClose={onClose}>
+      <div className="text-xs text-zinc-400 mb-2">Energy right now</div>
+      <Chips accent={accent} value={energy} onChange={setEnergy} options={[['low', 'Low'], ['med', 'Medium'], ['high', 'High']]} />
+      <div className="text-xs text-zinc-400 mt-4 mb-2">Time available</div>
+      <Chips accent={accent} value={time} onChange={setTime} options={[[15, '15 minutes'], [30, '30 minutes']]} />
+      <button className={BTN + ' w-full mt-5'} style={{ background: accent, color: '#09090b' }} onClick={() => setRes({ ...getPick(energy, time), k: uid() })}><Icon name="Dices" size={18} />{res ? 'Spin again' : 'Pick for me'}</button>
+      {res && (
+        <div key={res.k} className="pop mt-4 rounded-2xl border border-zinc-700 bg-zinc-950 p-5" aria-live="polite">
+          {res.task ? (<>
+            <div className="text-[11px] uppercase tracking-widest mb-2" style={{ color: accent }}>{res.catName} · worth {res.task.pts} pts</div>
+            <div className="text-lg text-zinc-50 leading-snug">{res.label}</div>
+            {res.idea && <div className="text-sm text-zinc-400 mt-2">Try: {res.idea}</div>}
+            {res.relaxed && <div className="text-xs text-zinc-500 mt-2">Nothing fits that energy and time exactly, so this is the closest open task.</div>}
+            <button className={GHOST + ' w-full mt-4'} onClick={() => onGo(res)}>Take me there<Icon name="ChevronRight" size={18} /></button>
+          </>) : <div className="text-zinc-300">Everything is ticked off. Nothing left to pick — enjoy your evening.</div>}
+        </div>
+      )}
+    </Sheet>
+  );
+}
+function ReceiptModal({ day, focus, sc, tier, streak, logged, accent, onLog, onClose, toast }) {
+  const [journal, setJournal] = useState(day.journal || '');
+  const lines = day.recovery
+    ? RECOVERY.map(t => [t.label.split(' — ')[0], t.pts * (day.tasks[t.id] || 0), t.pts])
+    : CATS.map(c => [c.name, sc.cats[c.id], c.pts]);
+  const text = [
+    `100-POINT DAILY OS — ${niceDate(day.date)}`, day.recovery ? '(Recovery Day)' : '',
+    ...lines.map(([l, p, m]) => `${l}: ${fmt(p)}/${m}`),
+    sc.bonus ? `Bonus: +${fmt(sc.bonus)}` : '',
+    `TOTAL: ${fmt(sc.total)} — ${tier.name.toUpperCase()} (${tier.sub})`, `Streak: ${streak} day${streak === 1 ? '' : 's'}`,
+    journal.trim() ? `"${journal.trim()}"` : '',
+  ].filter(Boolean).join('\n');
+  const share = async () => {
+    if (navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    toast((await copyText(text)) ? 'Receipt copied' : 'Could not copy');
+  };
+  return (
+    <Sheet title="Daily Receipt" onClose={onClose}>
+      <div className="receipt px-5 pt-5 pb-7 text-[13px]">
+        <div className="text-center font-bold tracking-widest">100-POINT DAILY OS</div>
+        <div className="text-center text-xs text-zinc-500 mt-1">{niceDate(day.date)}{day.recovery ? ' · RECOVERY DAY' : ''}</div>
+        <div className="dash my-3" />
+        {lines.map(([l, p, m]) => (
+          <div key={l} className="flex justify-between gap-3 py-0.5"><span className="truncate">{l}</span><span className="shrink-0">{fmt(p)} / {m}</span></div>
+        ))}
+        {sc.bonus > 0 && <div className="flex justify-between py-0.5"><span>Bonus</span><span>+{fmt(sc.bonus)}</span></div>}
+        <div className="dash my-3" />
+        <div className="flex justify-between text-lg font-bold"><span>TOTAL</span><span>{fmt(sc.total)}</span></div>
+        <div className="flex justify-between text-xs mt-1"><span>{tier.name.toUpperCase()} · {tier.sub}</span><span>Streak {streak}</span></div>
+        {journal.trim() && (<><div className="dash my-3" /><div className="text-xs italic">“{journal.trim()}”</div></>)}
+        <div className="text-center text-[10px] text-zinc-400 mt-4 tracking-widest">THANK YOU — SEE YOU TOMORROW</div>
+      </div>
+      <label className="block text-xs text-zinc-400 mt-4 mb-1" htmlFor="journal">One-line micro-journal</label>
+      <input id="journal" className={INPUT} maxLength={140} value={journal} onChange={e => setJournal(e.target.value)} placeholder="What made today work (or not)?" />
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <button className={GHOST} onClick={share}><Icon name="Share2" size={18} />Share</button>
+        <button className={BTN} style={{ background: accent, color: '#09090b' }} onClick={() => onLog(journal.trim())}><Icon name="Check" size={18} />{logged ? 'Update log' : 'Log day'}</button>
+      </div>
+    </Sheet>
+  );
+}
+
+/* ============================== TABS ============================== */
+function VaultCat({ cat, s, update, accent, count, openSync }) {
+  const [open, setOpen] = useState(false);
+  const ideas = s.vault[cat.id];
+  const groups = [['low', ENERGY.low], ['quick', ENERGY.quick], ['deep', ENERGY.deep]];
+  const special = cat.id === 'diet' ? ['rescue', 'Protein Rescue Vault'] : cat.id === 'gym' ? ['rest', 'Active Rest Vault'] : null;
+  const row = i => (
+    <div key={i.id} className="flex items-start gap-2 py-2 border-t border-zinc-800">
+      <div className="flex-1 text-sm text-zinc-300 leading-snug">{i.text}</div>
+      <button aria-label={`Delete idea: ${i.text}`} className="w-9 h-9 -my-1 grid place-items-center text-zinc-600 active:text-red-400 shrink-0" onClick={() => update(n => { n.vault[cat.id] = n.vault[cat.id].filter(x => x.id !== i.id); })}><Icon name="Trash2" size={16} /></button>
+    </div>
+  );
+  return (
+    <div className={CARD}>
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-zinc-800 grid place-items-center text-zinc-300"><Icon name={cat.icon} /></div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-zinc-50">{cat.name}</div>
+          <div className="text-xs text-zinc-400 truncate">Focus: {s.focus[cat.id]}</div>
+        </div>
+        <button className={GHOST + ' !min-h-[40px] !px-3 text-xs'} onClick={openSync}><Icon name="Sparkles" size={16} />Goal Sync</button>
+      </div>
+      <div className="mt-3">
+        <div className="flex justify-between text-xs text-zinc-400 mb-1"><span>Completions under this focus</span><span className="num">{count} / {LEVEL_EVERY}</span></div>
+        <div className="h-2 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${clamp((count % LEVEL_EVERY || (count ? LEVEL_EVERY : 0)) / LEVEL_EVERY * 100, 0, 100)}%`, background: accent }} /></div>
+      </div>
+      <button className="mt-3 w-full flex items-center justify-between text-sm text-zinc-300 min-h-[44px]" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>{ideas.length} ideas in the vault</span><span className="text-zinc-500">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && (
+        <div className="fade-in">
+          {groups.map(([k, label]) => {
+            const list = ideas.filter(i => i.energy === k && !i.tag);
+            return <div key={k} className="mt-3"><div className="text-[11px] uppercase tracking-widest text-zinc-500 mb-1">{label} · {list.length}</div>{list.length ? list.map(row) : <div className="text-xs text-zinc-600 py-2">Empty — add one with Goal Sync.</div>}</div>;
+          })}
+          {special && <div className="mt-3"><div className="text-[11px] uppercase tracking-widest mb-1" style={{ color: accent }}>{special[1]} · {ideas.filter(i => i.tag === special[0]).length}</div>{ideas.filter(i => i.tag === special[0]).map(row)}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+function StatsTab({ s, update, accent, rp, sc, displayStreak }) {
+  const today = s.today.date;
+  const bank = weekBank(s.history, today, sc.total);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map(d => d === today ? { date: d, score: sc.total, live: true } : (s.history[d] || { date: d, score: null }));
+  const recent = Object.values(s.history).filter(h => !h.recovery && h.date < today).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 7);
+  const journals = Object.values(s.history).filter(h => h.journal).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 10);
+  const rewards = [...s.settings.rewards].sort((a, b) => a.pts - b.pts);
+  const stat = (label, value, hint) => (
+    <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
+      <div className="text-xs text-zinc-400">{label}</div>
+      <div className="num text-2xl font-bold text-zinc-50 mt-1">{value}</div>
+      <div className="text-[11px] text-zinc-500 mt-1 leading-snug">{hint}</div>
+    </div>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {stat('Current streak', `${displayStreak} day${displayStreak === 1 ? '' : 's'}`, 'Grows on every day of 70+ points')}
+        {stat('Best streak', `${Math.max(rp.best, displayStreak)}`, 'Your longest run so far')}
+        {stat('Streak Shields', `${rp.shields} / 2`, 'Auto-used when a day ends under 70')}
+        {stat('Next shield', `${rp.gold} / 3`, 'Gold Days (90+) banked toward it')}
+      </div>
+
+      <div className={CARD}>
+        <div className="flex items-baseline justify-between">
+          <h3 className="font-semibold text-zinc-50">Weekly Point Bank</h3>
+          <div className="num text-sm text-zinc-400"><span className="text-xl font-bold" style={{ color: accent }}>{fmt(bank)}</span> / 700</div>
+        </div>
+        <div className="text-xs text-zinc-500 mt-1">Points earned since Monday, including today so far.</div>
+        <div className="h-3 rounded-full bg-zinc-800 overflow-hidden mt-3"><div className="h-full rounded-full transition-all duration-700" style={{ width: `${clamp(bank / 700 * 100, 0, 100)}%`, background: accent }} /></div>
+        <div className="mt-4 space-y-3">
+          {rewards.map(r => {
+            const got = bank >= r.pts;
+            return (
+              <div key={r.id} className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full grid place-items-center shrink-0" style={got ? { background: accent, color: '#09090b' } : { background: '#27272a', color: '#71717a' }}><Icon name={got ? 'Gift' : 'Lock'} size={16} /></div>
+                <input aria-label="Reward name" className="flex-1 min-w-0 bg-transparent border-b border-zinc-800 py-2 text-sm text-zinc-100" value={r.label} onChange={e => update(n => { n.settings.rewards.find(x => x.id === r.id).label = e.target.value; })} />
+                <input aria-label="Points needed" type="number" inputMode="numeric" className="num w-16 bg-transparent border-b border-zinc-800 py-2 text-sm text-right text-zinc-100" value={r.pts} onChange={e => update(n => { n.settings.rewards.find(x => x.id === r.id).pts = clamp(parseInt(e.target.value, 10) || 0, 0, 805); })} />
+                <button aria-label={`Remove reward ${r.label}`} className="w-9 h-9 grid place-items-center text-zinc-600" onClick={() => update(n => { n.settings.rewards = n.settings.rewards.filter(x => x.id !== r.id); })}><Icon name="X" size={16} /></button>
+              </div>
+            );
+          })}
+          {rewards.map(r => bank < r.pts ? <div key={'h' + r.id} className="text-xs text-zinc-500">{fmt(r.pts - bank)} more points unlocks “{r.label}”.</div> : <div key={'h' + r.id} className="text-xs" style={{ color: accent }}>Unlocked this week: {r.label}</div>)}
+          <button className={GHOST + ' w-full'} onClick={() => update(n => { n.settings.rewards.push({ id: uid(), pts: 650, label: 'New reward' }); })}><Icon name="Plus" size={18} />Add reward tier</button>
+        </div>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Last 7 days</h3>
+        <div className="text-xs text-zinc-500 mt-1">Each bar is one day's score. A longer bar means more points. The thin white line marks 70 — reach it and the streak is safe.</div>
+        <div className="mt-4 space-y-2.5">
+          {days.map(d => {
+            const t = d.score == null ? null : tierFor(d.score);
+            return (
+              <div key={d.date} className="flex items-center gap-3">
+                <div className="w-20 text-xs text-zinc-400 shrink-0">{d.live ? 'Today' : niceDate(d.date)}</div>
+                <div className="relative flex-1 h-6 rounded-md bg-zinc-800 overflow-hidden">
+                  {t && <div className="h-full rounded-md" style={{ width: `${clamp(d.score / 115 * 100, d.score > 0 ? 2 : 0, 100)}%`, background: t.color }} />}
+                  <div className="absolute top-0 bottom-0 w-px bg-white/80" style={{ left: `${70 / 115 * 100}%` }} />
+                </div>
+                <div className="w-24 text-xs shrink-0 text-right">{t ? <><span className="num font-bold text-zinc-100">{fmt(d.score)}</span> <span className="text-zinc-400">{d.recovery ? 'Recovery' : t.name}</span></> : <span className="text-zinc-600">No log</span>}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Category averages</h3>
+        <div className="text-xs text-zinc-500 mt-1">{recent.length ? `Average points per day over your last ${recent.length} logged day${recent.length === 1 ? '' : 's'}.` : 'Shows up after your first full day is logged.'}</div>
+        {recent.length > 0 && <div className="mt-4 space-y-3">
+          {CATS.map(c => {
+            const avg = recent.reduce((a, h) => a + ((h.cats && h.cats[c.id]) || 0), 0) / recent.length;
+            return (
+              <div key={c.id}>
+                <div className="flex justify-between text-sm"><span className="text-zinc-300">{c.name}</span><span className="num text-zinc-400"><span className="text-zinc-100 font-semibold">{avg.toFixed(1)}</span> of {c.pts}</span></div>
+                <div className="h-2 rounded-full bg-zinc-800 overflow-hidden mt-1"><div className="h-full rounded-full" style={{ width: `${avg / c.pts * 100}%`, background: accent }} /></div>
+              </div>
+            );
+          })}
+        </div>}
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Journal</h3>
+        {journals.length ? journals.map(h => (
+          <div key={h.date} className="py-3 border-t border-zinc-800 mt-3 first:mt-3">
+            <div className="flex justify-between text-xs text-zinc-500"><span>{niceDate(h.date)}</span><span className="num">{fmt(h.score)} pts</span></div>
+            <div className="text-sm text-zinc-300 mt-1">“{h.journal}”</div>
+          </div>
+        )) : <div className="text-xs text-zinc-500 mt-1">Your one-line notes from “Finish &amp; Log Day” collect here.</div>}
+      </div>
+    </div>
+  );
+}
+function SettingsTab({ s, update, accent, replaceAll, toast, sendTestPing }) {
+  const st = s.settings;
+  const [paste, setPaste] = useState('');
+  const [arm, setArm] = useState(false);
+  const fileRef = useRef(null);
+  const perm = 'Notification' in window ? Notification.permission : 'unsupported';
+  const set = (k, v) => update(n => { n.settings[k] = v; });
+  const doImport = str => { try { const raw = JSON.parse(str); if (!raw || typeof raw !== 'object' || !raw.history) throw new Error(); replaceAll(raw); setPaste(''); toast('Backup restored'); } catch (e) { toast('That is not a Daily OS backup file'); } };
+  const exportJSON = async () => {
+    const data = JSON.stringify(s, null, 2);
+    try {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      a.download = `daily-os-backup-${dateStr()}.json`; document.body.appendChild(a); a.click(); a.remove(); toast('Backup file downloaded');
+    } catch (e) { toast((await copyText(data)) ? 'Backup copied to clipboard' : 'Export failed'); }
+  };
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const row = (label, hint, control) => (
+    <div className="flex items-center gap-3 py-3 border-t border-zinc-800 first:border-t-0">
+      <div className="flex-1 min-w-0"><div className="text-sm text-zinc-100">{label}</div>{hint && <div className="text-xs text-zinc-500 mt-0.5 leading-snug">{hint}</div>}</div>{control}
+    </div>
+  );
+  const sel = 'rounded-xl bg-zinc-950 border border-zinc-700 px-2 py-2 text-zinc-100 num';
+  return (
+    <div className="space-y-4">
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50 mb-1">Targets</h3>
+        {row('Daily protein target', 'Grams. The +25g stepper awards the points when you reach it.',
+          <input aria-label="Daily protein target in grams" type="number" inputMode="numeric" className={sel + ' w-24 text-right'} value={st.proteinTarget} onChange={e => set('proteinTarget', clamp(parseInt(e.target.value, 10) || 0, 0, 500))} />)}
+        {row('Chime sounds', null, <Toggle label="Chime sounds" accent={accent} on={st.sound} onChange={v => { set('sound', v); if (v) chime(); }} />)}
+        {row('Haptic feedback', 'Vibrates on task check. Android only — iPhones do not allow it.', <Toggle label="Haptic feedback" accent={accent} on={st.haptics} onChange={v => set('haptics', v)} />)}
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50 mb-1">Pacing reminders (this device)</h3>
+        {row('Active hours', 'Reminders only fire inside this window.',
+          <div className="flex items-center gap-1">
+            <select aria-label="Active hours start" className={sel} value={st.activeStart} onChange={e => set('activeStart', +e.target.value)}>{hours.map(h => <option key={h} value={h}>{pad(h)}:00</option>)}</select>
+            <span className="text-zinc-500">–</span>
+            <select aria-label="Active hours end" className={sel} value={st.activeEnd} onChange={e => set('activeEnd', +e.target.value)}>{hours.map(h => <option key={h} value={h}>{pad(h)}:00</option>)}</select>
+          </div>)}
+        {row('Nudge me while under 70', perm === 'unsupported' ? 'This browser has no notifications; you still get the chime and the score in the tab title.' : perm === 'denied' ? 'Notifications are blocked in browser settings; chime and tab title still work.' : 'Notification + chime while the app is open.',
+          <Toggle label="Nudge me while under 70" accent={accent} on={st.notif} onChange={async v => { unlockAudio(); if (v && 'Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) {} } set('notif', v); }} />)}
+        {row('Remind every', null,
+          <select aria-label="Reminder interval" className={sel} value={st.notifEvery} onChange={e => set('notifEvery', +e.target.value)}>{[30, 60, 90, 120].map(m => <option key={m} value={m}>{m} min</option>)}</select>)}
+        <div className="text-xs text-zinc-500 mt-2 leading-snug">Browsers pause web apps in the background, so these only fire while Daily OS is open. For pings that reach a locked phone, use ntfy below.</div>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Phone push via ntfy.sh</h3>
+        <div className="text-xs text-zinc-500 mt-1 mb-3 leading-snug">Install the free ntfy app, subscribe to a topic name only you know, and type the same name here. Anyone who knows the topic can read it, so make it long and random.</div>
+        <label className="block text-xs text-zinc-400 mb-1" htmlFor="ntfy">Private topic name</label>
+        <input id="ntfy" className={INPUT + ' num'} autoCapitalize="off" autoCorrect="off" spellCheck="false" value={st.ntfyTopic} onChange={e => set('ntfyTopic', e.target.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64))} placeholder="dailyos-x7k2m9qf4" />
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <button className={GHOST} onClick={() => set('ntfyTopic', 'dailyos-' + uid() + uid())}>Generate one</button>
+          <button className={GHOST} disabled={!st.ntfyTopic} onClick={sendTestPing}><Icon name="Send" size={16} />Send test</button>
+        </div>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Backup</h3>
+        <div className="text-xs text-zinc-500 mt-1 mb-3 leading-snug">Everything is saved in this browser. Export a backup now and then — clearing site data or switching phone wipes it otherwise.</div>
+        <div className="grid grid-cols-2 gap-3">
+          <button className={BTN} style={{ background: accent, color: '#09090b' }} onClick={exportJSON}><Icon name="Download" size={18} />Export JSON</button>
+          <button className={GHOST} onClick={() => fileRef.current && fileRef.current.click()}><Icon name="Upload" size={18} />Import JSON</button>
+        </div>
+        <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => doImport(String(r.result)); r.readAsText(f); e.target.value = ''; }} />
+        <button className={GHOST + ' w-full mt-3'} onClick={async () => toast((await copyText(JSON.stringify(s))) ? 'Backup copied to clipboard' : 'Could not copy')}><Icon name="Copy" size={18} />Copy backup as text</button>
+        <label className="block text-xs text-zinc-400 mt-4 mb-1" htmlFor="paste">Or paste a backup</label>
+        <textarea id="paste" className={INPUT + ' h-20 num text-xs'} value={paste} onChange={e => setPaste(e.target.value)} placeholder='{"v":1, ...}' />
+        <button className={GHOST + ' w-full mt-2'} disabled={!paste.trim()} onClick={() => doImport(paste)}>Restore pasted backup</button>
+      </div>
+
+      <div className={CARD}>
+        <h3 className="font-semibold text-zinc-50">Danger zone</h3>
+        <button className={BTN + ' w-full mt-3 border ' + (arm ? 'bg-red-600 text-white border-red-600' : 'bg-transparent text-red-400 border-red-900')} onClick={() => { if (!arm) { setArm(true); setTimeout(() => setArm(false), 4000); } else { replaceAll(null); setArm(false); toast('All data erased'); } }}>{arm ? 'Tap again to erase everything' : 'Erase all data'}</button>
+      </div>
+      <div className="text-center text-[11px] text-zinc-600 pb-2">100-Point Daily OS · data stays on this device</div>
+    </div>
+  );
+}
+
+/* ============================== APP ============================== */
+function App() {
+  const [s, setS] = useState(load);
+  const [tab, setTab] = useState('today');
+  const [modal, setModal] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ref = useRef(s); ref.current = s;
+  const toastTimer = useRef(null);
+
+  const update = useCallback(fn => setS(p => {
+    const n = JSON.parse(JSON.stringify(p)); fn(n);
+    if (n.today.logged) n.history[n.today.date] = snapshot(n.today, n.focus);
+    return n;
+  }), []);
+  const replaceAll = raw => setS(hydrate(raw));
+  const toast = useCallback(msg => { setToastMsg(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToastMsg(''), 2600); }, []);
+
+  const day = s.today, st = s.settings;
+  const sc = scoreDay(day);
+  const tier = tierFor(sc.total), accent = tier.color;
+  const rp = replay(s.history, day.date);
+  const displayStreak = rp.streak + (sc.total >= 70 ? 1 : 0);
+  const rust = rustMap(s.history, day.date);
+  const sound = () => { if (ref.current.settings.sound) chime(); };
+  const buzz = () => { try { if (st.haptics && navigator.vibrate) navigator.vibrate(40); } catch (e) {} };
+
+  /* persistence */
+  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {} }, [s]);
+  useEffect(() => { document.title = `${fmt(sc.total)}/100 · Daily OS`; document.documentElement.style.setProperty('--accent', accent); }, [sc.total, accent]);
+  useEffect(() => { const h = () => unlockAudio(); window.addEventListener('pointerdown', h, { once: true }); return () => window.removeEventListener('pointerdown', h); }, []);
+
+  /* pacing */
+  const pace = () => {
+    const now = new Date(), h = now.getHours() + now.getMinutes() / 60, cur = scoreDay(ref.current.today).total;
+    const a = ref.current.settings.activeStart, b = ref.current.settings.activeEnd;
+    if (b <= a || h < a) return { active: false, text: 'Pacing starts when your active hours begin.' };
+    const expected = Math.round(70 * clamp((h - a) / (b - a), 0, 1));
+    const active = h < b;
+    if (cur >= 70) return { active, text: 'Streak is safe for today.' };
+    return { active, text: cur >= expected ? `On pace — ${fmt(70 - cur)} more points makes the streak safe.` : `${fmt(expected - cur)} points behind pace for 70 by ${pad(b)}:00.` };
+  };
+  const nextOpen = d => (d.recovery ? RECOVERY : TASKS).find(t => (d.tasks[t.id] || 0) < 1);
+
+  /* ntfy */
+  const ntfyUrl = topic => `https://ntfy.sh/${encodeURIComponent(topic)}`;
+  const sendTestPing = async () => {
+    try { const r = await fetch(ntfyUrl(st.ntfyTopic), { method: 'POST', body: 'Test ping from 100-Point Daily OS. If you can read this, phone pings work.', headers: { Title: 'Daily OS test', Tags: 'white_check_mark' } }); toast(r.ok ? 'Test sent — check your phone' : `ntfy said no (${r.status})`); }
+    catch (e) { toast('Could not reach ntfy.sh — check your connection'); }
+  };
+  const cancelPings = async (info, announce) => {
+    const pending = (info.items || []).filter(i => i.at > Date.now());
+    await Promise.all(pending.map(i => fetch(`${ntfyUrl(info.topic)}/${encodeURIComponent(i.seq)}`, { method: 'DELETE' }).catch(() => null)));
+    if (announce) { try { await fetch(ntfyUrl(info.topic), { method: 'POST', body: `You hit ${fmt(scoreDay(ref.current.today).total)} points. The rest of today's pings are cancelled.`, headers: { Title: 'Daily OS: target reached', Tags: 'tada', Priority: 'low' } }); } catch (e) {} }
+  };
+  const queuePings = async () => {
+    const topic = st.ntfyTopic.trim();
+    if (!topic) { setTab('settings'); toast('Add your ntfy topic in Settings first'); return; }
+    if (sc.total >= 75) { toast('Already at 75+ — no pings needed today'); return; }
+    const now = new Date(), times = [];
+    for (let h = Math.max(st.activeStart, now.getHours() + 1); h <= st.activeEnd; h++) { const at = new Date(); at.setHours(h, 0, 0, 0); if (at - now > 60000) times.push(at); }
+    if (!times.length) { toast('No active hours left today'); return; }
+    setBusy(true);
+    try {
+      if (day.ntfy && !day.ntfy.cancelled) await cancelPings(day.ntfy, false);
+      const items = await Promise.all(times.map(async at => {
+        const seq = `dos-${day.date}-${at.getHours()}-${uid()}`;
+        const r = await fetch(ntfyUrl(topic), { method: 'POST',
+          body: `${pad(at.getHours())}:00 check-in. Still under 75? Open Daily OS and bank your next task to keep the streak.`,
+          headers: { Title: '100-Point Daily OS', At: String(Math.floor(at.getTime() / 1000)), Tags: 'dart', 'X-Sequence-ID': seq } });
+        if (!r.ok) throw new Error(String(r.status));
+        const j = await r.json().catch(() => ({}));
+        return { at: at.getTime(), seq: j.sequence_id || j.id || seq };
+      }));
+      update(n => { n.today.ntfy = { topic, items, cancelled: false }; });
+      toast(`${items.length} phone pings queued`);
+    } catch (e) { toast(e.message === '429' ? 'ntfy rate limit hit — try again later' : 'Could not queue pings — check topic and connection'); }
+    setBusy(false);
+  };
+
+  /* score watchers: confetti, early-bird tracking, ntfy auto-cancel */
+  useEffect(() => {
+    if (sc.total >= 70 && !day.c70) { fireConfetti([accent, '#ffffff', '#d4d4d8', '#7dd3fc']); sound(); update(n => { n.today.c70 = true; }); }
+    if (sc.total >= 90 && !day.c90) { fireConfetti(['#facc15', '#ffffff', '#fde68a', '#f59e0b']); sound(); update(n => { n.today.c90 = true; }); }
+    if (!day.recovery && new Date().getHours() < 11 && sc.base > (day.early || 0)) update(n => { n.today.early = sc.base; });
+    if (sc.total >= 75 && day.ntfy && !day.ntfy.cancelled) { const info = day.ntfy; update(n => { if (n.today.ntfy) n.today.ntfy.cancelled = true; }); cancelPings(info, true).then(() => toast('75+ reached — phone pings cancelled')); }
+  }, [sc.total, sc.base]);
+
+  /* heartbeat: timers, midnight rollover, local nudges */
+  useEffect(() => {
+    const tick = () => {
+      const cur = ref.current, now = Date.now();
+      if (cur.today.date !== dateStr()) { setS(p => { const n = JSON.parse(JSON.stringify(p)); rollover(n); return n; }); return; }
+      const due = Object.keys(cur.today.timers || {}).filter(id => cur.today.timers[id] && cur.today.timers[id].end && now >= cur.today.timers[id].end);
+      if (due.length) {
+        update(n => due.forEach(id => { n.today.timers[id] = { left: 0, done: true }; const t = TASKS.find(x => x.id === id); if (t && t.auto && !n.today.recovery) n.today.tasks[id] = 1; }));
+        if (cur.settings.sound) chime();
+        try { if (cur.settings.haptics && navigator.vibrate) navigator.vibrate([80, 60, 80]); } catch (e) {}
+        toast(due.includes('learn') ? '30 minutes done — Learning points awarded' : 'Focus block complete — tick it off');
+      }
+      const total = scoreDay(cur.today).total, h = new Date().getHours();
+      if (cur.settings.notif && total < 70 && h >= cur.settings.activeStart && h < cur.settings.activeEnd && now - (cur.today.lastPing || 0) >= cur.settings.notifEvery * 60000) {
+        const nx = nextOpen(cur.today), body = `${pace().text}${nx ? ' Next up: ' + nx.label : ''}`;
+        try { if ('Notification' in window && Notification.permission === 'granted') new Notification(`Daily OS: ${fmt(total)}/100`, { body, tag: 'daily-os-pace' }); } catch (e) {}
+        if (cur.settings.sound) chime('ping');
+        toast(body);
+        update(n => { n.today.lastPing = now; });
+      }
+    };
+    const i = setInterval(tick, 1000);
+    const vis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(i); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+
+  /* actions */
+  const setTask = (id, v) => { if (v > 0) buzz(); update(n => { n.today.tasks[id] = v; }); };
+  const setTimer = (id, t) => update(n => { if (t) n.today.timers[id] = t; else delete n.today.timers[id]; });
+  const addProtein = g => { buzz(); update(n => { n.today.protein = clamp((n.today.protein || 0) + g, 0, 999); if (n.today.protein >= n.settings.proteinTarget && n.settings.proteinTarget > 0) n.today.tasks.protein = 1; }); };
+  const getPick = (energy, time) => {
+    const lvl = { low: 1, med: 2, high: 3 }[energy], d = ref.current.today;
+    const meta = t => (t.id === 'gym' && d.gymMode === 'rest' ? { ...t, energy: 1, label: 'Active rest: steps + mobility' } : t);
+    const open = (d.recovery ? RECOVERY : TASKS).map(meta).filter(t => (d.tasks[t.id] || 0) < 1);
+    if (!open.length) return { task: null };
+    const fit = open.filter(t => t.energy <= lvl && t.mins <= time);
+    const pool = fit.length ? fit : open, task = pool[Math.floor(Math.random() * pool.length)];
+    let idea = null;
+    if (task.cat) {
+      const want = energy === 'low' ? 'low' : energy === 'high' && time === 30 ? 'deep' : 'quick';
+      const tag = task.id === 'gym' && d.gymMode === 'rest' ? 'rest' : undefined;
+      const ideas = ref.current.vault[task.cat].filter(i => i.energy === want && i.tag === tag);
+      if (ideas.length) idea = ideas[Math.floor(Math.random() * ideas.length)].text;
+    }
+    return { task, label: task.label, catName: task.cat ? CAT[task.cat].name : 'Recovery', idea, relaxed: !fit.length };
+  };
+
+  /* level-up check-ins */
+  const levelUps = CATS.map(c => {
+    const focus = s.focus[c.id], count = focusCount(s.history, c.id, focus), key = c.id + '|' + focus;
+    return { cat: c, focus, count, key, due: Math.floor(count / LEVEL_EVERY) > (s.levelAck[key] || 0) };
+  });
+  const ack = lu => update(n => { n.levelAck[lu.key] = Math.floor(lu.count / LEVEL_EVERY); });
+
+  /* ---------- Today tab pieces ---------- */
+  const catCard = c => {
+    const tasks = TASKS.filter(t => t.cat === c.id), earned = sc.cats[c.id];
+    const rusty = rust[c.id] && earned === 0, mission = day.missions[c.id];
+    return (
+      <section key={c.id} id={'cat-' + c.id} className={CARD + (rusty ? ' !border-amber-500/70' : '')} aria-label={c.name}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl grid place-items-center shrink-0" style={earned >= c.pts ? { background: accent, color: '#09090b' } : { background: '#27272a', color: '#d4d4d8' }}><Icon name={c.icon} /></div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-zinc-50 leading-tight">{c.name}</h3>
+            <div className="num text-xs text-zinc-400">{fmt(earned)} / {c.pts} pts</div>
+          </div>
+          <button aria-label={`Inspire me: ${c.name}`} className="w-11 h-11 grid place-items-center rounded-xl bg-zinc-800 text-zinc-200 active:scale-95 transition-transform" onClick={() => setModal({ type: 'idea', cat: c.id, tag: c.id === 'gym' && day.gymMode === 'rest' ? 'rest' : undefined })}><Icon name="Dices" /></button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <button className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 px-3 min-h-[32px] text-xs text-zinc-300 max-w-full" onClick={() => setModal({ type: 'sync', cat: c.id })} aria-label={`Edit current focus for ${c.name}: ${s.focus[c.id]}`}>
+            <Icon name="Target" size={13} /><span className="truncate">{s.focus[c.id]}</span><Icon name="Pencil" size={11} className="text-zinc-500" />
+          </button>
+          {rusty && <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-400 px-2.5 min-h-[32px] text-xs font-semibold"><Icon name="TriangleAlert|AlertTriangle" size={13} />Rust Warning · 3 days at 0</span>}
+        </div>
+        {mission && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5">
+            <Icon name="Lock" size={14} className="mt-0.5" /><div className="flex-1 text-sm text-zinc-200 leading-snug"><span className="text-zinc-500">Today's mission: </span>{mission}</div>
+            <button aria-label="Clear mission" className="text-zinc-500 w-7 h-7 -m-1 grid place-items-center" onClick={() => update(n => { delete n.today.missions[c.id]; })}><Icon name="X" size={14} /></button>
+          </div>
+        )}
+        {c.id === 'gym' && (
+          <div className="mt-3 grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-950 border border-zinc-800" role="group" aria-label="Gym mode">
+            {[['workout', 'Workout day'], ['rest', 'Active rest day']].map(([m, l]) => (
+              <button key={m} aria-pressed={day.gymMode === m} className="rounded-lg min-h-[40px] text-sm font-medium text-zinc-400" style={day.gymMode === m ? { background: '#27272a', color: '#fafafa' } : {}} onClick={() => update(n => { n.today.gymMode = m; })}>{l}</button>
+            ))}
+          </div>
+        )}
+        <div className="mt-2">
+          {tasks.map(t => {
+            const val = day.tasks[t.id] || 0;
+            const label = t.id === 'gym' ? (day.gymMode === 'rest' ? 'Scheduled Active Rest Day — steps + mobility hit' : 'Workout Attended') : t.label;
+            return (
+              <TaskRow key={t.id} label={label} pts={t.pts} val={val} accent={accent} onSet={v => setTask(t.id, v)}
+                sub={t.id === 'protein' ? `${day.protein || 0}g of ${st.proteinTarget}g` : null}>
+                {t.timer && <TimerBar t={day.timers[t.id]} accent={accent} onChange={x => setTimer(t.id, x)} note={t.auto ? 'Chimes and awards the points at 0:00' : '30-minute focus block'} />}
+                {t.id === 'protein' && (
+                  <div className="mt-3">
+                    <div className="h-2 rounded-full bg-zinc-800 overflow-hidden"><div className="h-full rounded-full transition-all duration-500" style={{ width: `${clamp((day.protein || 0) / (st.proteinTarget || 1) * 100, 0, 100)}%`, background: accent }} /></div>
+                    <div className="flex gap-2 mt-3">
+                      <button aria-label="Remove 25 grams of protein" className={GHOST + ' !px-0 w-12'} onClick={() => addProtein(-25)}><Icon name="Minus" size={18} /></button>
+                      <button className={GHOST + ' flex-1'} onClick={() => addProtein(25)}><Icon name="Plus" size={18} />25g Protein</button>
+                      <button className={GHOST + ' flex-1'} onClick={() => setModal({ type: 'idea', cat: 'diet', tag: 'rescue' })}><Icon name="LifeBuoy" size={18} />Rescue Ideas</button>
+                    </div>
+                  </div>
+                )}
+              </TaskRow>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
+  const earlyOK = (day.early || 0) >= 25, before11 = new Date().getHours() < 11, p = pace();
+  const todayTab = (
+    <div className="space-y-4">
+      {levelUps.filter(l => l.due).map(lu => (
+        <div key={lu.key} className="fade-in rounded-2xl p-4 border" style={{ borderColor: accent, background: 'rgba(255,255,255,.04)' }} role="status">
+          <div className="flex items-center gap-2 font-semibold text-zinc-50"><Icon name="Trophy" />Level Up Check-In</div>
+          <div className="text-sm text-zinc-300 mt-1 leading-snug">{lu.count} completions under “{lu.focus}” in {lu.cat.name}. Ready to raise the difficulty, or pivot to a new goal?</div>
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            <button className={BTN + ' !px-2 text-xs'} style={{ background: accent, color: '#09090b' }} onClick={() => { ack(lu); setModal({ type: 'sync', cat: lu.cat.id }); }}>Harder</button>
+            <button className={GHOST + ' !px-2 text-xs'} onClick={() => { ack(lu); setModal({ type: 'sync', cat: lu.cat.id }); }}>Pivot goal</button>
+            <button className={GHOST + ' !px-2 text-xs'} onClick={() => ack(lu)}>Keep going</button>
+          </div>
+        </div>
+      ))}
+
+      {day.recovery ? (
+        <section className={CARD} aria-label="Recovery Day">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl grid place-items-center bg-zinc-800 text-zinc-200"><Icon name="HeartPulse" /></div>
+            <div><h3 className="font-semibold text-zinc-50">Recovery Day</h3><div className="text-xs text-zinc-400">Rest counts. Hit 70 through self-care and the streak holds.</div></div>
+          </div>
+          <div className="mt-2">{RECOVERY.map(t => <TaskRow key={t.id} label={t.label} pts={t.pts} val={day.tasks[t.id] || 0} accent={accent} onSet={v => setTask(t.id, v)} />)}</div>
+        </section>
+      ) : (<>
+        {CATS.map(catCard)}
+        <section className={CARD} aria-label="Bonus points">
+          <h3 className="font-semibold text-zinc-50">Bonus <span className="num text-xs text-zinc-400 font-normal">+{fmt(sc.bonus)} / 15</span></h3>
+          <div className="flex items-center gap-3 py-3 mt-1">
+            <Icon name="Sunrise" className="text-zinc-400" />
+            <div className="flex-1"><div className="text-[15px] text-zinc-100">+5 Early Bird</div>
+              <div className="text-xs text-zinc-400 mt-0.5">{earlyOK ? 'Unlocked: 25+ points logged before 11:00.' : before11 ? `${fmt(day.early || 0)} of 25 points logged before 11:00.` : 'Missed today — needs 25 points before 11:00.'}</div></div>
+            <Toggle label="Claim Early Bird bonus" accent={accent} on={day.earlyBird && earlyOK} onChange={v => { if (!earlyOK) { toast('Log 25 points before 11:00 to unlock'); return; } buzz(); update(n => { n.today.earlyBird = v; }); }} />
+          </div>
+          {sc.base >= 85 ? (
+            <div className="fade-in border-t border-zinc-800">
+              <TaskRow label="+10 Overdrive Stretch Goal" pts={10} val={day.overdrive || 0} accent={accent} onSet={v => { if (v > 0) buzz(); update(n => { n.today.overdrive = v; }); }}>
+                <input aria-label="Overdrive stretch goal" className={INPUT + ' mt-3'} value={day.overdriveText} onChange={e => update(n => { n.today.overdriveText = e.target.value; })} placeholder="Name your stretch goal for today" />
+              </TaskRow>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 py-3 border-t border-zinc-800 text-zinc-500"><Icon name="Lock" /><div className="text-sm">Hidden slot — unlocks at 85 points ({fmt(Math.max(0, 85 - sc.base))} to go)</div></div>
+          )}
+        </section>
+      </>)}
+
+      <section className={CARD} aria-label="Phone pings">
+        <div className="flex items-start gap-3"><Icon name="Bell" className="text-zinc-400 mt-0.5" />
+          <div className="flex-1"><div className="text-sm text-zinc-100">{p.text}</div>
+            <div className="text-xs text-zinc-500 mt-1">{day.ntfy ? (day.ntfy.cancelled ? "Today's phone pings were cancelled at 75+." : `${day.ntfy.items.filter(i => i.at > Date.now()).length} phone pings still scheduled. They cancel themselves at 75+.`) : 'Hourly pushes to your phone until you reach 75.'}</div></div>
+        </div>
+        <button className={GHOST + ' w-full mt-3'} disabled={busy} onClick={queuePings}><Icon name="Send" size={18} />{busy ? 'Queueing…' : day.ntfy && !day.ntfy.cancelled ? "Re-queue Today's Phone Pings" : "Queue Today's Phone Pings"}</button>
+      </section>
+
+      <button className={BTN + ' w-full !min-h-[56px] text-base'} style={{ background: accent, color: '#09090b' }} onClick={() => setModal({ type: 'receipt' })}><Icon name="Receipt|ReceiptText" />{day.logged ? "View Today's Receipt" : 'Finish & Log Day'}</button>
+      {day.logged && <div className="text-center text-xs text-zinc-500">Day logged. Changes you make before midnight still update it.</div>}
+    </div>
+  );
+
+  const vaultTab = (
+    <div className="space-y-4">
+      <div className="text-sm text-zinc-400 leading-snug">Each category has a Current Focus and a deck of ideas. Change the focus, then use Goal Sync to have Claude write a fresh deck.</div>
+      {CATS.map(c => <VaultCat key={c.id} cat={c} s={s} update={update} accent={accent} count={focusCount(s.history, c.id, s.focus[c.id])} openSync={() => setModal({ type: 'sync', cat: c.id })} />)}
+    </div>
+  );
+
+  const NAV = [['today', 'Today', 'House|Home'], ['vault', 'Vault & Goals', 'Library'], ['stats', 'Analytics & Bank', 'ChartColumn|BarChart3|BarChart'], ['settings', 'Settings', 'Settings']];
+  const mcat = modal && modal.cat ? CAT[modal.cat] : null;
+
+  return (
+    <div className="max-w-md mx-auto min-h-screen relative">
+      <header className="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur border-b border-zinc-800" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Ring total={sc.total} color={accent} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] uppercase tracking-widest text-zinc-500">{niceDate(day.date)}</div>
+            <div className="text-lg font-bold leading-tight" style={{ color: accent }}>{day.recovery ? 'Recovery' : tier.name}<span className="text-zinc-400 font-normal text-sm"> · {tier.sub}</span></div>
+            <div className="flex items-center gap-3 mt-1.5 text-zinc-300">
+              <span className="inline-flex items-center gap-1 text-sm" title="Daily streak"><Icon name="Flame" size={16} /><span className="num font-semibold">{displayStreak}</span><span className="sr-only"> day streak</span></span>
+              <span className="inline-flex items-center gap-0.5" role="img" aria-label={`${rp.shields} of 2 Streak Shields`}>
+                {[0, 1].map(i => <span key={i} style={{ color: i < rp.shields ? accent : '#3f3f46' }}><Icon name="Shield" size={16} /></span>)}
+              </span>
+              {sc.bonus > 0 && <span className="num text-xs text-zinc-400">+{fmt(sc.bonus)} bonus</span>}
+            </div>
+          </div>
+          <button aria-pressed={day.recovery} aria-label="Recovery Day mode" onClick={() => { buzz(); update(n => { n.today.recovery = !n.today.recovery; }); toast(day.recovery ? 'Back to a normal day' : 'Recovery Day on — rest is the task today'); }}
+            className="flex flex-col items-center justify-center gap-0.5 w-16 h-14 rounded-xl border text-[10px] font-semibold shrink-0"
+            style={day.recovery ? { background: accent, color: '#09090b', borderColor: accent } : { borderColor: '#3f3f46', color: '#a1a1aa' }}>
+            <Icon name="HeartPulse" size={18} />Recovery
+          </button>
+        </div>
+      </header>
+
+      <main className="px-4 pt-4" style={{ paddingBottom: 'calc(11rem + env(safe-area-inset-bottom))' }}>
+        <h1 className="sr-only">100-Point Daily OS</h1>
+        <div key={tab} className="fade-in">
+          {tab === 'today' && todayTab}
+          {tab === 'vault' && vaultTab}
+          {tab === 'stats' && <StatsTab s={s} update={update} accent={accent} rp={rp} sc={sc} displayStreak={displayStreak} />}
+          {tab === 'settings' && <SettingsTab s={s} update={update} accent={accent} replaceAll={replaceAll} toast={toast} sendTestPing={sendTestPing} />}
+        </div>
+      </main>
+
+      {tab === 'today' && (
+        <button aria-label="What should I do now? Pick a task for me" onClick={() => setModal({ type: 'roulette' })}
+          className="fixed z-40 w-14 h-14 rounded-full grid place-items-center shadow-xl shadow-black/60 active:scale-95 transition-transform"
+          style={{ background: accent, color: '#09090b', right: 'max(1rem, calc(50vw - 14rem + 1rem))', bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}><Icon name="Shuffle" size={24} /></button>
+      )}
+
+      <nav aria-label="Main" className="fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur border-t border-zinc-800" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="max-w-md mx-auto grid grid-cols-4">
+          {NAV.map(([id, label, icon]) => (
+            <button key={id} aria-current={tab === id ? 'page' : undefined} onClick={() => { setTab(id); window.scrollTo(0, 0); }} className="flex flex-col items-center justify-center gap-1 min-h-[64px] text-[10px] font-medium leading-tight px-1" style={{ color: tab === id ? accent : '#71717a' }}>
+              <Icon name={icon} size={22} /><span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      <div aria-live="polite" className="fixed inset-x-0 z-[60] flex justify-center pointer-events-none px-4" style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}>
+        {toastMsg && <div className="fade-in max-w-sm rounded-xl bg-zinc-100 text-zinc-900 text-sm font-medium px-4 py-3 shadow-xl">{toastMsg}</div>}
+      </div>
+
+      {modal && modal.type === 'idea' && (
+        <IdeaModal cat={mcat} accent={accent} showList={modal.tag === 'rescue'}
+          tagLabel={modal.tag === 'rescue' ? 'Protein Rescue Ideas' : modal.tag === 'rest' ? 'Active Rest Ideas' : null}
+          pool={s.vault[modal.cat].filter(i => (modal.tag ? i.tag === modal.tag : !i.tag))}
+          onLock={text => { buzz(); update(n => { n.today.missions[modal.cat] = text; }); setModal(null); toast('Mission locked in'); }} onClose={() => setModal(null)} />
+      )}
+      {modal && modal.type === 'sync' && (
+        <GoalSyncModal cat={mcat} focus={s.focus[modal.cat]} accent={accent} toast={toast} count={focusCount(s.history, modal.cat, s.focus[modal.cat])}
+          onSaveFocus={f => update(n => { n.focus[modal.cat] = f; })}
+          onImport={(ideas, mode) => update(n => { n.vault[modal.cat] = mode === 'overwrite' ? [...n.vault[modal.cat].filter(i => i.tag), ...ideas] : [...n.vault[modal.cat], ...ideas]; })}
+          onAdd={idea => update(n => { n.vault[modal.cat].push(idea); })} onClose={() => setModal(null)} />
+      )}
+      {modal && modal.type === 'roulette' && (
+        <RouletteModal accent={accent} getPick={getPick} onClose={() => setModal(null)}
+          onGo={res => { setModal(null); setTab('today'); setTimeout(() => { const el = res.task.cat && document.getElementById('cat-' + res.task.cat); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); else window.scrollTo({ top: 0, behavior: 'smooth' }); }, 60); }} />
+      )}
+      {modal && modal.type === 'receipt' && (
+        <ReceiptModal day={day} focus={s.focus} sc={sc} tier={tier} streak={displayStreak} logged={day.logged} accent={accent} toast={toast} onClose={() => setModal(null)}
+          onLog={journal => { buzz(); update(n => { n.today.journal = journal; n.today.logged = true; }); setModal(null); toast('Day logged — nice work'); }} />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<script>
+/* Home-screen icon + web manifest, generated at runtime so the app stays a single file. */
+(function () {
+  try {
+    var c = document.createElement('canvas'); c.width = c.height = 512; var x = c.getContext('2d');
+    x.fillStyle = '#09090b'; x.fillRect(0, 0, 512, 512);
+    x.lineWidth = 44; x.lineCap = 'round';
+    x.strokeStyle = '#27272a'; x.beginPath(); x.arc(256, 256, 170, 0, Math.PI * 2); x.stroke();
+    x.strokeStyle = '#facc15'; x.beginPath(); x.arc(256, 256, 170, -Math.PI / 2, Math.PI * 1.25); x.stroke();
+    x.fillStyle = '#fafafa'; x.font = 'bold 150px ui-monospace, Menlo, monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('100', 256, 266);
+    var png = c.toDataURL('image/png');
+    var add = function (rel, href) { var l = document.createElement('link'); l.rel = rel; l.href = href; document.head.appendChild(l); };
+    add('apple-touch-icon', png); add('icon', png);
+    if (/^https?:/.test(location.protocol)) {
+      var m = { name: '100-Point Daily OS', short_name: 'Daily OS', start_url: location.href.split('#')[0], scope: location.href.split('#')[0].replace(/[^/]*$/, ''),
+        display: 'standalone', background_color: '#09090b', theme_color: '#09090b', icons: [{ src: png, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] };
+      add('manifest', URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' })));
+    }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
